@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Weather App</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-size: cover;
+      background-repeat: no-repeat;
+      transition: background-image 0.6s ease-in-out;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .weather-card {
+      background: rgba(255, 255, 255, 0.678);
+      padding: 30px 25px;
+      border-radius: 16px;
+      text-align: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      max-width: 360px;
+      width: 100%;
+    }
+    input[type="text"] {
+      padding: 10px;
+      border: 1px solid #cccccc01;
+      width: 80%;
+      margin-bottom: 10px;
+      border-radius: 8px;
+    }
+    button {
+      padding: 10px 15px;
+      background-color: #4b9cd3;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 5px;
+    }
+    label {
+      font-size: 14px;
+      margin-top: 8px;
+      margin-bottom: 8px;
+      display: block;
+    }
+    #result {
+      margin-top: 18px;
+      font-size: 16px;
+      transition: 0.3s;
+    }
+    #result img {
+      width: 80px;
+      height: 80px;
+    }
+    #forecast {
+      margin-top: 22px;
+    }
+    .forecast-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .forecast-card {
+      background: rgba(255, 255, 255, 0);
+      padding: 10px 6px;
+      border-radius: 8px;
+      min-width: 90px;
+      font-size: 13px;
+    }
+    @media (max-width: 500px) {
+      .weather-card { max-width: 98vw; padding: 20px 3vw; }
+      .forecast-row { flex-direction: column; gap: 8px; align-items: center; }
+      .forecast-card { min-width: 78vw; }
+    }
+  </style>
+</head>
+<body>
+<div class="weather-card">
+  <h2>🌦️ Weather App</h2>
+  <input type="text" id="cityInput" placeholder="Enter city name">
+  <button onclick="getWeather()">Get Weather</button>
+  <button onclick="getWeatherByLocation()">Use My Location</button>
+  <label>
+    <input type="checkbox" id="unitToggle" onchange="getWeather()"> Show in Fahrenheit
+  </label>
+  <div id="result"></div>
+  <div id="forecast"></div>
+</div>
+<script>
+const apiKey = '43a27dd291b1718ba1d8fd56f07dcc73'; // Replace with your actual OpenWeatherMap API key
+
+// Helper: capitalize first letter
+function cap(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// Get weather by city
+async function getWeather() {
+  const city = document.getElementById("cityInput").value.trim();
+  const result = document.getElementById("result");
+  const forecastDiv = document.getElementById("forecast");
+  forecastDiv.innerHTML = "";
+  if (!city) {
+    result.innerHTML = '<p style="color:red;">Please enter a city name.</p>';
+    document.body.style.backgroundImage = "url('images/default.jpg')";
+    return;
+  }
+  const isF = document.getElementById('unitToggle').checked;
+  const unit = isF ? 'imperial' : 'metric';
+  const tempUnit = isF ? '°F' : '°C';
+  result.innerHTML = '<p>Loading...</p>';
+
+  try {
+    // Fetch current weather
+    const url = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${apiKey}&units=${unit}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if ( data.cod === 404) {
+      result.innerHTML = `<p style="color:red">City not found!</p>`;
+      document.body.style.backgroundImage = "url('images/default.jpg')";
+      return;
+    }
+
+    // Local time calculation
+    const utc = new Date().getTime() + (new Date().getTimezoneOffset() * 60000);
+    const localTime = new Date(utc + (data.timezone * 1000));
+    // Prepare weather display
+    const temp = data.main.temp;
+    const condition = data.weather[0].description;
+    const humidity = data.main.humidity;
+    const icon = data.weather[0].icon;
+    const iconURL = `https://openweathermap.org/img/wn/${icon}@2x.png`;
+    const windSpeed = data.wind.speed;
+    const windDeg = data.wind.deg;
+    // Set background image
+    let bgImage = "default.jpg";
+    if (condition.includes("cloud")) {
+      bgImage = "cloudy.jpg";
+    } else if (condition.includes("rain")) {
+      bgImage = "rainy.jpg";
+    } else if (condition.includes("clear")) {
+      bgImage = "sunny.jpg";
+    }
+    document.body.style.backgroundImage = `url('images/${bgImage}')`;
+
+    result.innerHTML = `
+      <h3>📍 ${cap(data.name)}</h3>
+      <img src="${iconURL}" alt="Weather Icon">
+      <p>🌡️ Temperature: ${Math.round(temp)}${tempUnit}</p>
+      <p>☁️ Condition: ${cap(condition)}</p>
+      <p>💧 Humidity: ${humidity}%</p>
+      <p>🌬️ Wind: ${windSpeed} ${isF ? 'mph' : 'm/s'}, ${windDeg}°</p>
+      <p>🕒 Local time: ${localTime.toLocaleTimeString()}</p>
+    `;
+
+    // Get and show forecast
+    await getForecast(city, unit, tempUnit);
+
+  } catch (error) {
+    result.innerHTML = `<p>Error fetching data!</p>`;
+    document.body.style.backgroundImage = "url('images/default.jpg')";
+  }
+}
+
+// Get weather by geolocation
+function getWeatherByLocation() {
+  const result = document.getElementById("result");
+  const forecastDiv = document.getElementById("forecast");
+  forecastDiv.innerHTML = '';
+  result.innerHTML = '<p>Getting your location...</p>';
+  if (!navigator.geolocation) {
+    result.innerHTML = '<p>Geolocation is not supported by your browser.</p>';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    async function(pos) {
+      const lat = pos.coords.latitude;
+      const lon = pos.coords.longitude;
+      const isF = document.getElementById('unitToggle').checked;
+      const unit = isF ? 'imperial' : 'metric';
+      const tempUnit = isF ? '°F' : '°C';
+
+      try {
+        const url = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=${unit}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.cod === "404" || data.cod === 404) {
+          result.innerHTML = `<p style="color:red">Location not found!</p>`;
+          document.body.style.backgroundImage = "url('images/default.jpg')";
+          return;
+        }
+
+        // Local time calculation
+        const utc = new Date().getTime() + (new Date().getTimezoneOffset() * 60000);
+        const localTime = new Date(utc + (data.timezone * 1000));
+        // Prepare weather display
+        const temp = data.main.temp;
+        const condition = data.weather[0].description;
+        const humidity = data.main.humidity;
+        const icon = data.weather[0].icon;
+        const iconURL = `https://openweathermap.org/img/wn/${icon}@2x.png`;
+        const windSpeed = data.wind.speed;
+        const windDeg = data.wind.deg;
+
+        // Set background image
+        let bgImage = "default.jpg";
+        if (condition.includes("cloud")) bgImage = "cloudy.jpg";
+        else if (condition.includes("rain")) bgImage = "rainy.jpg";
+        else if (condition.includes("clear")) bgImage = "sunny.jpg";
+        document.body.style.backgroundImage = `url('images/${bgImage}')`;
+
+        result.innerHTML = `
+          <h3>📍 ${cap(data.name)}</h3>
+          <img src="${iconURL}" alt="Weather Icon">
+          <p>🌡️ Temperature: ${Math.round(temp)}${tempUnit}</p>
+          <p>☁️ Condition: ${cap(condition)}</p>
+          <p>💧 Humidity: ${humidity}%</p>
+          <p>🌬️ Wind: ${windSpeed} ${isF ? 'mph' : 'm/s'}, ${windDeg}°</p>
+          <p>🕒 Local time: ${localTime.toLocaleTimeString()}</p>
+        `;
+
+        // get city name for forecast API
+        await getForecast(data.name, unit, tempUnit);
+
+      } catch (error) {
+        result.innerHTML = `<p>Error fetching location data!</p>`;
+        document.body.style.backgroundImage = "url('images/default.jpg')";
+      }
+    },
+    function() {
+      result.innerHTML = '<p>Location access denied.</p>';
+      document.body.style.backgroundImage = "url('images/default.jpg')";
+    }
+  );
+}
+
+// 5-day forecast function
+async function getForecast(city, unit, tempUnit) {
+  const forecastDiv = document.getElementById("forecast");
+  forecastDiv.innerHTML = "<p>Loading forecast...</p>";
+  const url = `https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${apiKey}&units=${unit}`;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    if (data.cod !== "200") {
+      forecastDiv.innerHTML = `<p style="color:red">No forecast available.</p>`;
+      return;
+    }
+    // Select midday slot per day
+    const daily = {};
+    data.list.forEach(item => {
+      const date = item.dt_txt.split(" ")[0];
+      const hour = item.dt_txt.split(" ")[1];
+      if (hour === "12:00:00" && !daily[date]) daily[date] = item;
+    });
+    // fill up to 5 (if not enough, take first available)
+    if (Object.keys(daily).length < 5) {
+      data.list.forEach(item => {
+        const date = item.dt_txt.split(" ")[0];
+        if (!daily[date]) daily[date] = item;
+      });
+    }
+
+    let html = `<h4>5-Day Forecast</h4><div class="forecast-row">`;
+    Object.values(daily).slice(0, 5).forEach(item => {
+      html += `
+        <div class="forecast-card">
+          <div><b>${item.dt_txt.split(" ")[0]}</b></div>
+          <img src="<https://openweathermap.org/img/wn/${item.weather>[0].icon}@2x.png" width="50" height="50">
+          <div>${Math.round(item.main.temp)}${tempUnit}</div>
+          <div>${cap(item.weather[0].main)}</div>
+        </div>
+      `;
+    });
+    html += `</div>`;
+    forecastDiv.innerHTML = html;
+
+  } catch {
+    forecastDiv.innerHTML = "<p>Error loading forecast.</p>";
+  }
+}
+
+// Enter key triggers search
+document.getElementById('cityInput').addEventListener('keydown', function(e){
+  if (e.key === "Enter") getWeather();
+});
+</script>
+</body>
+</html>
